@@ -38,6 +38,19 @@ This is an honest reflection of how a lot of development works right now. The un
 
 ---
 
+## Data sources
+
+All vulnerability data used in this project is sourced from publicly available, open source records:
+
+- **CVE IDs and metadata** — sourced from the [National Vulnerability Database (NVD)](https://nvd.nist.gov), maintained by NIST. CVE identifiers, CVSS scores, severity ratings, and publish dates are all publicly disclosed information available to anyone.
+- **Vulnerability descriptions** — written in plain English based on public security advisories, vendor bulletins, and NVD entries. No proprietary threat intelligence or paid feed data was used.
+- **Asset data** — entirely fictional. Hostnames, IP addresses, OS names, and team names are generic and made up. They do not represent any real organization's infrastructure.
+- **Findings data** — synthetically generated relationships between the fictional assets and the public CVEs. SLA deadlines and remediation statuses are fabricated for demonstration purposes.
+
+Nothing in this repository contains proprietary data, private vulnerability intelligence, or information from any real organization's environment.
+
+---
+
 ## How the SSL works
 
 SSL is handled entirely in `serve.py` at the server level — the application code knows nothing about it. On container startup, `serve.py` calls the `openssl` CLI binary to generate a self-signed cert and stores it in `/tmp`. Hypercorn is then pointed at those cert files and binds on port 443. All TLS termination happens at the ASGI server layer before a request ever reaches FastAPI.
