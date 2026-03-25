@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PatchWatch — Vulnerability Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #090c10;
+      --surface:   #0d1117;
+      --border:    #1c2333;
+      --border2:   #2a3548;
+      --text:      #c9d1d9;
+      --muted:     #58677a;
+      --accent:    #f97316;
+      --accent2:   #fb923c;
+      --green:     #3fb950;
+      --red:       #f85149;
+      --yellow:    #e3b341;
+      --blue:      #58a6ff;
+      --mono:      'Space Mono', monospace;
+      --sans:      'DM Sans', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+    body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(249,115,22,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(249,115,22,.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+    header { position: relative; z-index: 10; border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 60px; background: rgba(13,17,23,.9); backdrop-filter: blur(12px); }
+    .logo { display: flex; align-items: center; gap: .75rem; font-family: var(--mono); font-size: 1rem; font-weight: 700; letter-spacing: .05em; color: #fff; }
+    .logo-icon { width: 28px; height: 28px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: .75rem; color: #000; font-weight: 700; }
+    .logo-sub { font-family: var(--mono); font-size: .65rem; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+    .header-badge { font-family: var(--mono); font-size: .6rem; color: var(--green); background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.25); padding: .25rem .6rem; border-radius: 4px; letter-spacing: .08em; }
+    main { position: relative; z-index: 1; flex: 1; max-width: 960px; width: 100%; margin: 0 auto; padding: 2.5rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    .hero { text-align: center; padding: 1rem 0 .5rem; }
+    .hero h1 { font-family: var(--mono); font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 700; color: #fff; letter-spacing: -.01em; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { margin-top: .6rem; font-size: .9rem; color: var(--muted); font-weight: 300; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
+    .suggestion { font-family: var(--mono); font-size: .68rem; color: var(--muted); background: rgba(255,255,255,.02); border: 1px solid var(--border); padding: .4rem .75rem; border-radius: 4px; cursor: pointer; transition: all .15s ease; }
+    .suggestion:hover { color: var(--accent); border-color: var(--accent); background: rgba(249,115,22,.06); }
+    .query-form { display: flex; flex-direction: column; gap: .75rem; }
+    .input-wrap { display: flex; gap: .75rem; align-items: flex-start; }
+    .prompt-label { font-family: var(--mono); font-size: .8rem; color: var(--accent); padding-top: .9rem; user-select: none; white-space: nowrap; }
+    textarea { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--sans); font-size: .9rem; line-height: 1.5; padding: .75rem 1rem; resize: none; min-height: 52px; max-height: 160px; transition: border-color .15s; outline: none; }
+    textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(249,115,22,.1); }
+    textarea::placeholder { color: var(--muted); }
+    .run-btn { background: var(--accent); color: #000; border: none; border-radius: 8px; padding: .75rem 1.5rem; font-family: var(--mono); font-size: .8rem; font-weight: 700; letter-spacing: .08em; cursor: pointer; white-space: nowrap; transition: background .15s, transform .1s; align-self: flex-start; }
+    .run-btn:hover { background: var(--accent2); }
+    .run-btn:active { transform: scale(.97); }
+    .run-btn:disabled { background: var(--border2); color: var(--muted); cursor: not-allowed; }
+    .loading { display: none; align-items: center; gap: .75rem; font-family: var(--mono); font-size: .78rem; color: var(--muted); }
+    .loading.active { display: flex; }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; animation: fadeUp .3s ease; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .result-section { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+    .result-section:last-child { border-bottom: none; }
+    .section-label { font-family: var(--mono); font-size: .62rem; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; margin-bottom: .6rem; display: flex; align-items: center; gap: .5rem; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .answer-text { font-size: .92rem; line-height: 1.7; color: #e6edf3; }
+    .sql-block { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .9rem 1rem; font-family: var(--mono); font-size: .78rem; color: #a5d6ff; white-space: pre-wrap; word-break: break-word; line-height: 1.6; }
+    .table-wrap { overflow-x: auto; border-radius: 6px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    thead tr { background: rgba(255,255,255,.03); }
+    th { font-family: var(--mono); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: .6rem .85rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: .55rem .85rem; border-bottom: 1px solid rgba(28,35,51,.6); color: var(--text); vertical-align: top; font-family: var(--mono); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    .badge { display: inline-block; padding: .15rem .45rem; border-radius: 4px; font-size: .68rem; font-weight: 700; letter-spacing: .04em; font-family: var(--mono); }
+    .badge-critical { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+    .badge-high { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
+    .badge-medium { background: rgba(88,166,255,.1); color: var(--blue); border: 1px solid rgba(88,166,255,.3); }
+    .badge-low { background: rgba(63,185,80,.1); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+    .badge-open { background: rgba(248,81,73,.1); color: var(--red); border: 1px solid rgba(248,81,73,.25); }
+    .badge-remediated { background: rgba(63,185,80,.1); color: var(--green); border: 1px solid rgba(63,185,80,.25); }
+    .badge-in_progress { background: rgba(88,166,255,.1); color: var(--blue); border: 1px solid rgba(88,166,255,.25); }
+    .badge-accepted_risk { background: rgba(227,179,65,.1); color: var(--yellow); border: 1px solid rgba(227,179,65,.25); }
+    .badge-production { background: rgba(249,115,22,.1); color: var(--accent); border: 1px solid rgba(249,115,22,.25); }
+    .badge-staging { background: rgba(88,166,255,.1); color: var(--blue); border: 1px solid rgba(88,166,255,.25); }
+    .badge-development { background: rgba(63,185,80,.1); color: var(--green); border: 1px solid rgba(63,185,80,.25); }
+    .row-count { font-family: var(--mono); font-size: .68rem; color: var(--muted); margin-top: .5rem; }
+    .error-box { background: rgba(248,81,73,.06); border: 1px solid rgba(248,81,73,.3); border-radius: 8px; padding: 1rem 1.25rem; font-family: var(--mono); font-size: .8rem; color: var(--red); }
+    footer { position: relative; z-index: 1; border-top: 1px solid var(--border); text-align: center; padding: 1rem; font-family: var(--mono); font-size: .62rem; color: var(--muted); letter-spacing: .08em; }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div>PatchWatch</div>
+      <div class="logo-sub">Vulnerability Intelligence</div>
+    </div>
+  </div>
+  <div class="header-badge">● SYSTEM ONLINE</div>
+</header>
+<main>
+  <div class="hero">
+    <h1>Ask anything about your <span>vulnerability data</span></h1>
+    <p>Claude writes SQL, executes it, and answers in plain English — no dashboards required.</p>
+  </div>
+  <div class="suggestions">
+    <div class="suggestion" onclick="fillQuestion(this)">How many critical open findings are in production?</div>
+    <div class="suggestion" onclick="fillQuestion(this)">Which assets have the most unpatched vulnerabilities?</div>
+    <div class="suggestion" onclick="fillQuestion(this)">Show all CVEs with a CVSS score above 9.5</div>
+    <div class="suggestion" onclick="fillQuestion(this)">What findings are past their SLA deadline?</div>
+    <div class="suggestion" onclick="fillQuestion(this)">List open critical findings on the infra team</div>
+    <div class="suggestion" onclick="fillQuestion(this)">Which vulnerabilities have no patch available?</div>
+  </div>
+  <div class="query-form">
+    <div class="input-wrap">
+      <span class="prompt-label">$></span>
+      <textarea id="question" rows="2" placeholder="Ask a question about vulnerabilities, assets, or findings..."></textarea>
+    </div>
+    <div style="display:flex;align-items:center;gap:1rem;">
+      <button class="run-btn" id="runBtn" onclick="runQuery()">RUN QUERY</button>
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <span>Claude is analyzing your data...</span>
+      </div>
+    </div>
+  </div>
+  <div id="errorBox" class="error-box" style="display:none;"></div>
+  <div id="resultCard" class="result-card" style="display:none;"></div>
+</main>
+<footer>
+  PatchWatch — Portfolio project for Nucleus Security ·
+  <a href="/docs" target="_blank">API Docs</a> ·
+  <a href="/schema" target="_blank">DB Schema</a>
+</footer>
+<script>
+  const BADGE_KEYS = ['critical','high','medium','low','open','remediated','in_progress','accepted_risk','production','staging','development'];
+  function fillQuestion(el) { document.getElementById('question').value = el.textContent; document.getElementById('question').focus(); }
+  function cellValue(val) {
+    if (val === null || val === undefined) return '<span style="color:var(--muted)">—</span>';
+    const str = String(val);
+    if (BADGE_KEYS.includes(str.toLowerCase())) return `<span class="badge badge-${str.toLowerCase()}">${str}</span>`;
+    if (str === '1' || str.toLowerCase() === 'true') return '<span class="badge badge-remediated">YES</span>';
+    if (str === '0' || str.toLowerCase() === 'false') return '<span class="badge badge-open">NO</span>';
+    return str;
+  }
+  function buildTable(results) {
+    if (!results.length) return '<p style="font-family:var(--mono);font-size:.78rem;color:var(--muted);padding:.5rem 0">No rows returned.</p>';
+    const cols = Object.keys(results[0]);
+    const head = cols.map(c => `<th>${c}</th>`).join('');
+    const body = results.map(row => `<tr>${cols.map(c => `<td>${cellValue(row[c])}</td>`).join('')}</tr>`).join('');
+    return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  async function runQuery() {
+    const question = document.getElementById('question').value.trim();
+    if (!question) return;
+    const btn = document.getElementById('runBtn');
+    const loading = document.getElementById('loading');
+    const resultCard = document.getElementById('resultCard');
+    const errorBox = document.getElementById('errorBox');
+    btn.disabled = true;
+    loading.classList.add('active');
+    resultCard.style.display = 'none';
+    errorBox.style.display = 'none';
+    try {
+      const res = await fetch('/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || `HTTP ${res.status}`); }
+      const data = await res.json();
+      resultCard.innerHTML = `
+        <div class="result-section"><div class="section-label">Answer</div><div class="answer-text">${data.answer}</div></div>
+        <div class="result-section"><div class="section-label">Generated SQL</div><div class="sql-block">${data.sql}</div></div>
+        <div class="result-section"><div class="section-label">Raw Results</div>${buildTable(data.results)}<div class="row-count">${data.row_count} row${data.row_count !== 1 ? 's' : ''} returned</div></div>
+      `;
+      resultCard.style.display = 'block';
+    } catch (e) {
+      errorBox.textContent = `Error: ${e.message}`;
+      errorBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      loading.classList.remove('active');
+    }
+  }
+  document.getElementById('question').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') runQuery(); });
+</script>
+</body>
+</html>

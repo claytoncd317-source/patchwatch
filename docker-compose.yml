@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  patchwatch:
+    build: .
+    container_name: patchwatch
+    ports:
+      - "443:443"
+    env_file:
+      - .env
+    restart: unless-stopped
