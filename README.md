@@ -1,151 +1,10 @@
 # PatchWatch
 
-A containerized vulnerability intelligence agent that lets you ask plain-English questions about your vulnerability and asset data. Built as a portfolio piece targeting the vulnerability management space.
+A containerized vulnerability intelligence agent that lets you ask plain-English questions about your vulnerability and asset data. Built as a portfolio piece for the Nucleus Security Cloud Engineering Intern challenge.
 
 ---
 
-## What it does
-
-Instead of clicking through dashboards, you just ask questions. Things like:
-
-- *"Which production assets have critical open findings?"*
-- *"Show me everything past its SLA deadline"*
-- *"What CVEs don't have a patch yet?"*
-
-Under the hood, Claude generates a SQL query from your question, runs it against a SQLite database, and writes back a plain-English answer alongside the raw results and the generated query. The whole thing runs over HTTPS in a Docker container.
-
----
-
-## How long it took
-
-Total build time was around 4-5 hours spread across a couple of sessions.
-
-The bulk of that wasn't writing code — it was environment issues. WSL2 + Docker + SSL is a genuinely painful combination. uvicorn's built-in SSL support throws a `PermissionError: [Errno 13]` on `ctx.load_cert_chain()` in WSL2 regardless of file permissions, user context, or approach. I went through several attempts before landing on Hypercorn as the ASGI server, generating certs via the openssl CLI at container startup and storing them in `/tmp` to sidestep the permission issues entirely. That one problem probably ate 1.5-2 hours on its own.
-
-The actual application logic — the two-turn tool use loop in `agent.py`, the FastAPI routes, the SQLite schema and seed data — came together relatively quickly once the infrastructure was sorted. Getting Docker Compose working on the specific Ubuntu/WSL2 setup (the compose plugin wasn't in the default apt repos and had to be installed manually) added another chunk of time.
-
-The frontend was AI-generated from a direction I gave it. The backend architecture, data model, and debugging were mine.
-
----
-
-## A note on AI assistance
-
-I used Claude as a coding assistant throughout this project. I designed the architecture, worked through the SSL debugging, and built the agentic loop logic — but Claude helped write and refine a lot of the implementation, particularly boilerplate and seed data.
-
-The frontend (`app/static/index.html`) was almost entirely AI-generated. I gave it a direction — dark terminal aesthetic, security tool vibe, show the generated SQL alongside results and the plain-English answer — and Claude produced the HTML/CSS/JS. That's worth being transparent about. The design decisions were mine; the implementation was Claude's.
-
-This is an honest reflection of how a lot of development works right now. The understanding of what the code does and why still has to be yours.
-
----
-
-## Data sources
-
-All vulnerability data used in this project is sourced from publicly available, open source records:
-
-- **CVE IDs and metadata** — sourced from the [National Vulnerability Database (NVD)](https://nvd.nist.gov), maintained by NIST. CVE identifiers, CVSS scores, severity ratings, and publish dates are all publicly disclosed information available to anyone.
-- **Vulnerability descriptions** — written in plain English based on public security advisories, vendor bulletins, and NVD entries. No proprietary threat intelligence or paid feed data was used.
-- **Asset data** — entirely fictional. Hostnames, IP addresses, OS names, and team names are generic and made up. They do not represent any real organization's infrastructure.
-- **Findings data** — synthetically generated relationships between the fictional assets and the public CVEs. SLA deadlines and remediation statuses are fabricated for demonstration purposes.
-
-Nothing in this repository contains proprietary data, private vulnerability intelligence, or information from any real organization's environment.
-
----
-
-## How the SSL works
-
-SSL is handled entirely in `serve.py` at the server level — the application code knows nothing about it. On container startup, `serve.py` calls the `openssl` CLI binary to generate a self-signed cert and stores it in `/tmp`. Hypercorn is then pointed at those cert files and binds on port 443. All TLS termination happens at the ASGI server layer before a request ever reaches FastAPI.
-
-This approach was chosen specifically because uvicorn's built-in SSL path calls `ctx.load_cert_chain()` in a way that raises `PermissionError: [Errno 13]` in WSL2 environments. Hypercorn builds its own SSLContext differently and doesn't hit this bug.
-
----
-
-## Infrastructure setup (WSL2 + Docker)
-
-This is the full sequence of commands used to set up the environment and get the project running from scratch on WSL2 Ubuntu.
-
-### Project structure
-```bash
-mkdir -p ~/patchwatch/app/static
-cd ~/patchwatch
-touch serve.py Dockerfile docker-compose.yml requirements.txt README.md .env.example .gitignore
-touch app/__init__.py app/main.py app/agent.py app/database.py app/models.py
-touch app/static/index.html
-```
-
-### Docker Compose plugin
-Docker Compose wasn't available as an apt package on this Ubuntu setup, so it was installed manually as a CLI plugin:
-```bash
-DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-mkdir -p $DOCKER_CONFIG/cli-plugins
-curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 \
-  -o $DOCKER_CONFIG/cli-plugins/docker-compose
-chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-
-# Verify
-docker compose version
-```
-
-### Environment file
-```bash
-cp .env.example .env
-# Then open .env and add your ANTHROPIC_API_KEY
-nano .env
-```
-
-### Build and run
-```bash
-docker compose up --build
-```
-
-### Verify the container is running
-```bash
-docker compose ps
-```
-
-### Stop the container
-```bash
-docker compose down
-```
-
-### Rebuild after code changes
-```bash
-docker compose up --build
-```
-
-### Git setup
-```bash
-cd ~/patchwatch
-git init
-git add .
-git commit -m "initial commit: vulnerability intelligence agent with Claude tool use"
-git remote add origin https://github.com/claytoncd317-source/patchwatch.git
-git branch -M main
-git push -u origin main
-```
-
-### Pushing updates
-```bash
-git add .
-git commit -m "your message here"
-git push
-```
-
----
-
-## Tech stack
-
-| Layer | Choice |
-|-------|--------|
-| Language | Python 3.11 |
-| Web framework | FastAPI |
-| ASGI server | Hypercorn (SSL-safe in WSL2) |
-| AI | Claude via Anthropic tool use API |
-| Database | SQLite (stdlib, no ORM) |
-| Container | Docker + Compose |
-
----
-
-## Running it locally
+## Running locally
 
 You'll need Docker and an Anthropic API key.
 
@@ -157,9 +16,92 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open `https://localhost` and accept the self-signed cert warning.
+Open `https://localhost` in your browser and accept the self-signed cert warning.
 
-The database seeds automatically on first startup with 12 realistic assets, 20 real CVEs from 2023–2024 (RegreSSHion, XZ backdoor, HTTP/2 Rapid Reset, etc.), and 30 findings linking them together.
+The database seeds automatically on first startup with 12 realistic assets, 20 real CVEs from 2023–2024, and 30 findings linking them together.
+
+---
+
+## Design choices
+
+**Hypercorn over uvicorn**
+uvicorn's built-in SSL path calls `ctx.load_cert_chain()` in a way that raises `PermissionError: [Errno 13]` in WSL2 environments regardless of file permissions or user context. Hypercorn builds its own SSLContext differently and doesn't hit this bug. This was the single biggest technical decision in the project and the one that took the most time to diagnose.
+
+**Self-signed cert generated at container startup**
+`serve.py` calls the `openssl` CLI binary when the container starts and writes the cert and key to `/tmp`. This means every deployment gets a fresh cert, the private key never touches the repository, and `/tmp` is always writable inside a Docker container so there are no permission issues.
+
+**SSL at the server layer, not the app layer**
+The FastAPI application code knows nothing about TLS. Hypercorn handles all encryption before a request reaches the app. This is the correct separation of concerns — the web framework handles routing and business logic, the ASGI server handles transport security.
+
+**SQLite with raw sqlite3**
+The point of this project is the agentic layer on top of the database, not the database itself. SQLite keeps the stack simple and portable with zero external dependencies. Using the stdlib `sqlite3` module directly (no ORM) keeps the SQL surface transparent, which matters because Claude is the one writing the queries.
+
+**Claude tool use for SQL generation**
+Rather than prompting Claude to return SQL in a code block and parsing it with regex, the agent uses the Anthropic tool use API. Claude calls `run_sql(query=...)` as a structured function call, we execute it, feed the results back, and Claude writes a plain-English answer grounded in real data. This is more reliable and more interesting to demonstrate than string parsing.
+
+---
+
+## What I would improve with more time
+
+- **Replace the self-signed cert with a proper local CA** using something like `mkcert` so the browser trust warning goes away entirely
+- **Add persistent storage** — right now the SQLite database lives in `/tmp` inside the container and is wiped on restart. A Docker volume would fix this
+- **Streaming responses** — the query endpoint currently waits for Claude to finish before returning anything. Server-sent events would make it feel much more responsive
+- **Rate limiting and error handling** — the `/query` endpoint has no protection against abuse or runaway API costs
+- **Better logging** — right now logs go to stdout. A structured logging setup with request IDs would make debugging much easier in a real environment
+- **Authentication** — anyone who can reach the service can query it. Even basic API key auth would be a meaningful improvement
+
+---
+
+## Deploying to AWS
+
+The straightforward path would be ECS (Elastic Container Service) with Fargate:
+
+1. Push the Docker image to ECR (Elastic Container Registry)
+2. Define an ECS task that pulls from ECR and injects `ANTHROPIC_API_KEY` via AWS Secrets Manager as an environment variable — never hardcoded
+3. Put an Application Load Balancer in front of the ECS service and attach an ACM (AWS Certificate Manager) certificate for real HTTPS — this replaces the self-signed cert entirely
+4. The ALB terminates TLS and forwards plain HTTP to the container internally, so the Hypercorn SSL setup would be removed in favor of ALB-managed certs
+5. Use RDS or EFS if you need the SQLite database to persist across container restarts
+
+For a simpler single-container deployment, App Runner or Elastic Beanstalk would get it running faster with less configuration.
+
+---
+
+## Why storing a private SSL key in a repository is bad practice
+
+A private key is the secret half of a TLS certificate — whoever has it can impersonate your server and decrypt traffic that was meant for it. Committing it to a repository is dangerous for several reasons:
+
+- **Git history is permanent.** Even if you delete the file in a later commit, the key still exists in the repository history and can be recovered with `git log` or by cloning an older state
+- **Public repos are truly public.** If the repo is on GitHub, the key is accessible to anyone on the internet the moment it's pushed
+- **Secrets scanners will flag it.** Tools like GitHub's secret scanning, truffleHog, and GitGuardian actively scan for private keys and will alert on it
+- **It invalidates the security model.** TLS only works if the private key is secret. Once it's in a repo, you have to assume it's compromised and revoke and reissue the cert
+
+The correct approach — which this project uses — is to generate the cert and key at runtime, store them only in memory or a tmpfs location like `/tmp`, and never let them touch version control. For production, secrets belong in a secrets manager like AWS Secrets Manager or HashiCorp Vault.
+
+---
+
+## How long it took
+
+About an hour to build the actual application. The SSL issue — diagnosing why uvicorn was throwing `PermissionError: [Errno 13]` on `ctx.load_cert_chain()` in WSL2 and finding that Hypercorn solved it cleanly — took additional time on top of that before a single line of app code was written.
+
+---
+
+## AI tools used
+
+I used Claude as a coding assistant throughout this project. I designed the architecture, debugged the SSL issues, and worked through the agentic loop logic — Claude helped write and refine the implementation.
+
+The frontend (`app/static/index.html`) was almost entirely AI-generated. I gave it a direction and Claude produced the HTML/CSS/JS. The design decisions were mine; the implementation was Claude's.
+
+---
+
+## Data sources
+
+All vulnerability data is sourced from publicly available, open source records:
+
+- **CVE IDs, CVSS scores, and metadata** — from the [National Vulnerability Database (NVD)](https://nvd.nist.gov), maintained by NIST. Fully public information
+- **Asset data** — entirely fictional. Hostnames, IPs, and team names do not represent any real organization
+- **Findings data** — synthetically generated for demonstration purposes
+
+Nothing in this repository contains proprietary data or information from any real organization's environment.
 
 ---
 
@@ -172,12 +114,25 @@ patchwatch/
 ├── docker-compose.yml
 ├── app/
 │   ├── main.py        # FastAPI routes
-│   ├── agent.py       # Claude tool-use loop (the interesting part)
+│   ├── agent.py       # Claude tool-use loop
 │   ├── database.py    # SQLite init + seed data
 │   ├── models.py      # Pydantic schemas
 │   └── static/
 │       └── index.html # Frontend (AI-generated)
 ```
+
+---
+
+## Tech stack
+
+| Layer | Choice |
+|-------|--------|
+| Language | Python 3.11 |
+| Web framework | FastAPI |
+| ASGI server | Hypercorn |
+| AI | Claude via Anthropic tool use API |
+| Database | SQLite |
+| Container | Docker + Compose |
 
 ---
 
