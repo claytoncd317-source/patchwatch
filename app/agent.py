@@ -78,11 +78,11 @@ Important query guidelines:
     messages: list[dict] = [{"role": "user", "content": question}]
 
     response = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-5",
         max_tokens=1024,
         system=system_prompt,
         tools=[SQL_TOOL],
-        tool_choice={"type": "required"},
+        tool_choice={"type": "any"},
         messages=messages
     )
 
@@ -116,7 +116,7 @@ Important query guidelines:
     ])
 
     final_response = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-5",
         max_tokens=1024,
         system=system_prompt,
         tools=[SQL_TOOL],
